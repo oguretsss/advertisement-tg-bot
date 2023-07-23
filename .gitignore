@@ -1,0 +1,10 @@
+venv
+.vscode
+.idea
+__pycache__
+logs
+log*
+bot_settings.py
+credentials.json
+*.db
+service_account.json
