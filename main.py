@@ -10,7 +10,7 @@ from telegram import InputMediaPhoto, PhotoSize, InputMedia, InlineKeyboardButto
 
 import messages
 from advertisement_repository import AdvertisementRepository
-
+import traceback
 try:
     import bot_settings
 except ImportError(bot_settings):
@@ -56,9 +56,14 @@ def generate_user_link(user):
 async def handle_user_message(update, context):
     message = update.message
     chat_id = update.effective_chat.id
-    user = message.from_user
-    user_id = update.effective_user.id
-    text = message.text or message.caption
+    user = update.effective_user
+    if user:
+        user_id = update.effective_user.id
+    else:
+        logging.warning(f"No user found in chat: {chat_id}. Probably a message from the channel")
+        await asyncio.sleep(0.01)
+        return
+    text = message.text or message.caption or ""
     photos = message.photo
     message_id = message.message_id
     media_group_id = message.media_group_id
@@ -121,21 +126,15 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def default_error_handler(update, context):
     logging.error(f"Error occurred and wasn't handled in code so triggered default error handler")
+    logging.error(f"Error: {context.error}")
+
+    tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
+    tb_string = "".join(tb_list)
+    logging.error(f"Traceback: {tb_string}")
     if update and update.effective_user:
         async with lock:
             advertisement_repository.remove_advertisement(update.effective_user.id)
-
-    if update and update.callback_query:
-        try:
-            await update.callback_query.answer()
-        except Exception as e:
-            logging.error(f"Error during handling error: {e}")
-
-    if update and update.effective_chat:
-        try:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=messages.MSG_ERROR)
-        except Exception as e:
-            logging.error(f"Error during handling error: {e}")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=messages.MSG_ERROR)
 
 
 def main():
