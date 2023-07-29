@@ -48,9 +48,9 @@ def generate_user_link(user):
     user_id = user.id
     logging.info(f"Generating user link for user: {user_id}")
     # Markdown
-    return f"Author: [link](tg://user?id={user_id})"
+    # return f"Author: [link](tg://user?id={user_id})"
     # HTML
-    # return f"Author: <a href='tg://user?id={user_id}'>link</a>"
+    return f"Author: <a href='tg://user?id={user_id}'>link</a>"
 
 
 async def handle_user_message(update, context):
@@ -80,8 +80,8 @@ async def handle_user_message(update, context):
             logging.info(f"Adding new advertisement for user: {user_id}")
 
             author_text = generate_user_link(user)
-            message_text = f"{escape_markdown(text, 2)}\n\n{author_text}"
-            # message_text = f"{escape(text)}\n\n{author_text}"
+            # message_text = f"{escape_markdown(text, 2)}\n\n{author_text}"
+            message_text = f"{escape(text)}\n\n{author_text}"
             advertisement_repository.add_advertisement(user_id, message_text)
             logging.info(f"Message text: {message_text}")
             if photo_file_id:
@@ -110,11 +110,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     media = [InputMediaPhoto(file_id) for file_id in advertisement_repository.active_advertisements[user_id].media]
                     advertisement_repository.remove_advertisement(user_id)
                     await context.bot.send_media_group(chat_id=CHANNEL_ID, caption=caption, media=media,
-                                                       parse_mode=ParseMode.MARKDOWN_V2)
+                                                       parse_mode=ParseMode.HTML)
                     await query.edit_message_text(text=messages.MSG_SUCCESS)
                 else:
                     advertisement_repository.remove_advertisement(user_id)
-                    await context.bot.send_message(chat_id=CHANNEL_ID, text=caption, parse_mode=ParseMode.MARKDOWN_V2)
+                    await context.bot.send_message(chat_id=CHANNEL_ID, text=caption, parse_mode=ParseMode.HTML)
                     await query.edit_message_text(text=messages.MSG_SUCCESS)
 
     elif callback_data == "ACTION_DISCARD":
