@@ -10,6 +10,9 @@ class Advertisement:
     def add_media(self, file_id):
         self.media.append(file_id)
 
+    def add_text(self, text):
+        self.caption += f'\n{text}'
+
 
 class AdvertisementRepository:
     def __init__(self):

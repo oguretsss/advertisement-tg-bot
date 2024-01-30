@@ -11,6 +11,7 @@ from telegram import InputMediaPhoto, PhotoSize, InputMedia, InlineKeyboardButto
 import messages
 from advertisement_repository import AdvertisementRepository
 import traceback
+
 try:
     import bot_settings
 except ImportError(bot_settings):
@@ -45,11 +46,15 @@ async def handle_start(update, context):
 
 def generate_user_link(user):
     user_id = user.id
-    logging.info(f"Generating user link for user: {user_id}")
+    nickname = user.username
+    logging.info(f"Generating user link for user: {user_id}. Nick: {nickname}")
+    res = f"Author: <a href='tg://user?id={user_id}'>link</a>"
+    if nickname:
+        res += f"\n@{nickname}"
     # Markdown
     # return f"Author: [link](tg://user?id={user_id})"
     # HTML
-    return f"Author: <a href='tg://user?id={user_id}'>link</a>"
+    return res
 
 
 async def handle_user_message(update, context):
@@ -79,21 +84,19 @@ async def handle_user_message(update, context):
         logging.info(f"User: {user_id} found among active advertisements. Appending media")
         if photo_file_id:
             advertisement_repository.active_advertisements[user_id].add_media(photo_file_id)
+        if text:
+            advertisement_repository.active_advertisements[user_id].add_text(escape(text))
     else:
         logging.info(f"Adding new advertisement for user: {user_id}")
 
-        author_text = generate_user_link(user)
-        # message_text = f"{escape_markdown(text, 2)}\n\n{author_text}"
-        message_text = f"{escape(text)}\n\n{author_text}"
-        advertisement_repository.add_advertisement(user_id, message_text)
-        logging.info(f"Message text: {message_text}")
+        advertisement_repository.add_advertisement(user_id, escape(text))
+        logging.info(f"Message text: {text}")
         if photo_file_id:
             advertisement_repository.active_advertisements[user_id].add_media(photo_file_id)
-        button_list = [InlineKeyboardButton(messages.BTN_PUBLISH, callback_data="ACTION_PUBLISH"),
-                       InlineKeyboardButton(messages.BTN_DISCARD, callback_data="ACTION_DISCARD")]
+        button_list = [InlineKeyboardButton(messages.BTN_PREVIEW, callback_data="ACTION_PREVIEW")]
         reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=2))
         await context.bot.send_message(chat_id=chat_id,
-                                       text=messages.MSG_CONFIRM, reply_markup=reply_markup)
+                                       text=messages.MSG_PREVIEW, reply_markup=reply_markup)
 
 
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -102,27 +105,52 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     logging.info(f"Callback handler called with data {callback_data}")
     user_id = update.effective_user.id
+    user = update.effective_user
     if callback_data == "ACTION_PUBLISH":
         logging.info(f"Publishing advertisement for user: {update.effective_user.id}")
         if user_id not in advertisement_repository.active_advertisements:
             await context.bot.send_message(chat_id=chat_id, text=messages.MSG_ERROR)
         else:
             caption = advertisement_repository.active_advertisements[user_id].caption
+            author_text = generate_user_link(user)
+            message_text = f"{caption}\n\n{author_text}"
             if advertisement_repository.active_advertisements[user_id].media:
-                media = [InputMediaPhoto(file_id) for file_id in advertisement_repository.active_advertisements[user_id].media]
+                media = [InputMediaPhoto(file_id) for file_id in
+                         advertisement_repository.active_advertisements[user_id].media]
                 advertisement_repository.remove_advertisement(user_id)
-                await context.bot.send_media_group(chat_id=CHANNEL_ID, caption=caption, media=media,
+                await context.bot.send_media_group(chat_id=CHANNEL_ID, caption=message_text, media=media,
                                                    parse_mode=ParseMode.HTML)
                 await query.edit_message_text(text=messages.MSG_SUCCESS)
             else:
                 advertisement_repository.remove_advertisement(user_id)
-                await context.bot.send_message(chat_id=CHANNEL_ID, text=caption, parse_mode=ParseMode.HTML)
+                await context.bot.send_message(chat_id=CHANNEL_ID, text=message_text, parse_mode=ParseMode.HTML)
                 await query.edit_message_text(text=messages.MSG_SUCCESS)
 
     elif callback_data == "ACTION_DISCARD":
         logging.info(f"Discarding advertisement for user: {update.effective_user.id}")
         advertisement_repository.remove_advertisement(user_id)
         await query.edit_message_text(text=messages.MSG_ABORTED)
+
+    elif callback_data == "ACTION_PREVIEW":
+        logging.info(f"Publishing preview for user: {update.effective_user.id}")
+        if user_id not in advertisement_repository.active_advertisements:
+            await context.bot.send_message(chat_id=chat_id, text=messages.MSG_ERROR)
+        else:
+            caption = advertisement_repository.active_advertisements[user_id].caption
+            author_text = generate_user_link(user)
+            message_text = f"{caption}\n\n{author_text}"
+            button_list = [InlineKeyboardButton(messages.BTN_PUBLISH, callback_data="ACTION_PUBLISH"),
+                           InlineKeyboardButton(messages.BTN_DISCARD, callback_data="ACTION_DISCARD")]
+            reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=2))
+            if advertisement_repository.active_advertisements[user_id].media:
+                media = [InputMediaPhoto(file_id) for file_id in
+                         advertisement_repository.active_advertisements[user_id].media]
+                await context.bot.send_media_group(chat_id=chat_id, caption=message_text, media=media,
+                                                   parse_mode=ParseMode.HTML)
+            else:
+                await context.bot.send_message(chat_id=chat_id, text=message_text, parse_mode=ParseMode.HTML)
+            await context.bot.send_message(chat_id=chat_id,
+                                           text=messages.MSG_CONFIRM, reply_markup=reply_markup)
 
 
 async def default_error_handler(update, context):
@@ -151,4 +179,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
