@@ -71,11 +71,16 @@ async def handle_user_message(update, context):
         logging.warning(f"Message is None for user: {user_id}")
         await asyncio.sleep(0.01)
         return
+
+    member = await context.bot.get_chat_member(chat_id, user_id)
+    logging.info(f"User {user_id} status in {chat_id} chat is: {member.status}")
+    if member.status == 'kicked':
+        logging.info(f"User is kicked, message wont be published")
+        return
+
     logging.info(f"Received message from user: {user_id}. Text: {message.text}, caption: {message.caption}")
     text = message.text or message.caption or ""
     photos = message.photo
-    message_id = message.message_id
-    media_group_id = message.media_group_id
     if photos:
         photo_file_id = photos[-1].file_id
     else:
@@ -164,6 +169,14 @@ async def default_error_handler(update, context):
         advertisement_repository.remove_advertisement(update.effective_user.id)
         await context.bot.send_message(chat_id=update.effective_chat.id, text=messages.MSG_ERROR)
 
+def is_user_banned(chat_id, user_id):
+    try:
+        member = bot.get_chat_member(chat_id=chat_id, user_id=user_id)
+        print(f"User status: {member.status}")
+        return member.status == 'kicked'
+    except TelegramError as e:
+        print(f"Error fetching member: {e}")
+        return False
 
 def main():
     application = ApplicationBuilder().token(bot_settings.BOT_TOKEN).build()
