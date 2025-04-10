@@ -169,15 +169,6 @@ async def default_error_handler(update, context):
         advertisement_repository.remove_advertisement(update.effective_user.id)
         await context.bot.send_message(chat_id=update.effective_chat.id, text=messages.MSG_ERROR)
 
-def is_user_banned(chat_id, user_id):
-    try:
-        member = bot.get_chat_member(chat_id=chat_id, user_id=user_id)
-        print(f"User status: {member.status}")
-        return member.status == 'kicked'
-    except TelegramError as e:
-        print(f"Error fetching member: {e}")
-        return False
-
 def main():
     application = ApplicationBuilder().token(bot_settings.BOT_TOKEN).build()
 
