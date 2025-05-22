@@ -49,9 +49,14 @@ def generate_user_link(user):
     user_id = user.id
     nickname = user.username
     logging.info(f"Generating user link for user: {user_id}. Nick: {nickname}")
-    res = f"Author: <a href='tg://user?id={user_id}'>link</a>"
+    
+    res = messages.AUTHOR
+    
     if nickname:
-        res += f"\n@{nickname}"
+        res += f"@{nickname}"
+    else:
+        res += f"<a href='tg://user?id={user_id}'>link</a>"
+    
     # Markdown
     # return f"Author: [link](tg://user?id={user_id})"
     # HTML
