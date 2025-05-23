@@ -2,7 +2,7 @@ import asyncio
 import logging
 from datetime import datetime
 
-from telegram.constants import ParseMode
+from telegram.constants import ParseMode, ChatMemberStatus
 from telegram.helpers import escape_markdown, escape
 from telegram.ext import Updater, MessageHandler, filters, ApplicationBuilder, CommandHandler, ContextTypes, \
     CallbackQueryHandler
@@ -71,11 +71,23 @@ async def handle_user_message(update, context):
         logging.warning(f"Message is None for user: {user_id}")
         await asyncio.sleep(0.01)
         return
+
+    member = await context.bot.get_chat_member(CHANNEL_ID, user_id)
+    logging.info(f"User {user_id} status in {CHANNEL_ID} chat is: {member.status}")
+    if member.status == ChatMemberStatus.BANNED:
+        logging.info(f"User is kicked, message wont be published")
+        await context.bot.send_message(chat_id=chat_id,
+                                 text=messages.MSG_BANNED)
+        return
+    if member.status == ChatMemberStatus.LEFT:
+        logging.info(f"User is not a member, message wont be published")
+        await context.bot.send_message(chat_id=chat_id,
+                                 text=messages.MSG_LEFT)
+        return
+
     logging.info(f"Received message from user: {user_id}. Text: {message.text}, caption: {message.caption}")
     text = message.text or message.caption or ""
     photos = message.photo
-    message_id = message.message_id
-    media_group_id = message.media_group_id
     if photos:
         photo_file_id = photos[-1].file_id
     else:
@@ -163,7 +175,6 @@ async def default_error_handler(update, context):
     if update and update.effective_user:
         advertisement_repository.remove_advertisement(update.effective_user.id)
         await context.bot.send_message(chat_id=update.effective_chat.id, text=messages.MSG_ERROR)
-
 
 def main():
     application = ApplicationBuilder().token(bot_settings.BOT_TOKEN).build()
