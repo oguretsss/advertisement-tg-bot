@@ -38,4 +38,4 @@ CHANNEL_ID = "-1001123456789"
 ```
 ## Starting the bot
 1. Activate venv: `source venv/bin/activate`
-2. Start bot: `python3 main.py`
+2. Start bot: `./main.py`
