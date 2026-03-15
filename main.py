@@ -21,7 +21,7 @@ except ImportError(bot_settings):
 
 BOT_TOKEN = bot_settings.BOT_TOKEN
 CHANNEL_ID = bot_settings.CHANNEL_ID
-LOG_FILENAME = datetime.now().strftime('logs/bot_log_%d%m%Y_%H%M%S.log')
+LOG_FILENAME = datetime.now().strftime('logs/bot_log_%Y%m%d_%H%M%S.log')
 
 logging.basicConfig(
     format='%(asctime)s : %(filename)s:%(lineno)d : %(levelname)s - %(message)s',
