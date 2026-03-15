@@ -28,7 +28,7 @@ logging.basicConfig(
     level=logging.INFO,
     filename=LOG_FILENAME
 )
-advertisement_repository = AdvertisementRepository()
+advertisement_repository = AdvertisementRepository("advertisements.db")
 
 lock = asyncio.Lock()
 
@@ -40,7 +40,7 @@ def build_menu(buttons, n_cols):
 
 async def handle_start(update, context):
     logging.info(f"Start command called by: {update.effective_user.id}")
-    advertisement_repository.remove_advertisement(user_id=update.effective_user.id)
+    advertisement_repository.remove_draft(user_id=update.effective_user.id)
     await context.bot.send_message(chat_id=update.effective_chat.id,
                                    text=messages.GREETING)
 
@@ -98,19 +98,19 @@ async def handle_user_message(update, context):
         photo_file_id = photos[-1].file_id
     else:
         photo_file_id = None
-    if user_id in advertisement_repository.active_advertisements:
+    draft = advertisement_repository.get_draft(user_id)
+    if draft:
         logging.info(f"User: {user_id} found among active advertisements. Appending media")
         if photo_file_id:
-            advertisement_repository.active_advertisements[user_id].add_media(photo_file_id)
+            advertisement_repository.add_media(draft["id"], photo_file_id)
         if text:
-            advertisement_repository.active_advertisements[user_id].add_text(escape(text))
+            advertisement_repository.append_text(draft["id"], escape(text))
     else:
         logging.info(f"Adding new advertisement for user: {user_id}")
-
-        advertisement_repository.add_advertisement(user_id, escape(text))
+        ad_id = advertisement_repository.create_draft(user_id, escape(text))
         logging.info(f"Message text: {text}")
         if photo_file_id:
-            advertisement_repository.active_advertisements[user_id].add_media(photo_file_id)
+            advertisement_repository.add_media(ad_id, photo_file_id)
         button_list = [InlineKeyboardButton(messages.BTN_PREVIEW, callback_data="ACTION_PREVIEW")]
         reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=2))
         await context.bot.send_message(chat_id=chat_id,
@@ -124,45 +124,46 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.info(f"Callback handler called with data {callback_data}")
     user_id = update.effective_user.id
     user = update.effective_user
+    draft = advertisement_repository.get_draft(user_id)
+
     if callback_data == "ACTION_PUBLISH":
         logging.info(f"Publishing advertisement for user: {update.effective_user.id}")
-        if user_id not in advertisement_repository.active_advertisements:
+        if not draft:
             await context.bot.send_message(chat_id=chat_id, text=messages.MSG_ERROR)
         else:
-            caption = advertisement_repository.active_advertisements[user_id].caption
+            caption = draft["caption"]
             author_text = generate_user_link(user)
             message_text = f"{caption}\n\n{author_text}"
-            if advertisement_repository.active_advertisements[user_id].media:
-                media = [InputMediaPhoto(file_id) for file_id in
-                         advertisement_repository.active_advertisements[user_id].media]
-                advertisement_repository.remove_advertisement(user_id)
+            if draft["media"]:
+                media = [InputMediaPhoto(file_id) for file_id in draft["media"]]
+                advertisement_repository.publish(draft["id"])
                 await context.bot.send_media_group(chat_id=CHANNEL_ID, caption=message_text, media=media,
                                                    parse_mode=ParseMode.HTML)
                 await query.edit_message_text(text=messages.MSG_SUCCESS)
             else:
-                advertisement_repository.remove_advertisement(user_id)
+                advertisement_repository.publish(draft["id"])
                 await context.bot.send_message(chat_id=CHANNEL_ID, text=message_text, parse_mode=ParseMode.HTML)
                 await query.edit_message_text(text=messages.MSG_SUCCESS)
 
     elif callback_data == "ACTION_DISCARD":
         logging.info(f"Discarding advertisement for user: {update.effective_user.id}")
-        advertisement_repository.remove_advertisement(user_id)
+        if draft:
+            advertisement_repository.discard(draft["id"])
         await query.edit_message_text(text=messages.MSG_ABORTED)
 
     elif callback_data == "ACTION_PREVIEW":
         logging.info(f"Publishing preview for user: {update.effective_user.id}")
-        if user_id not in advertisement_repository.active_advertisements:
+        if not draft:
             await context.bot.send_message(chat_id=chat_id, text=messages.MSG_ERROR)
         else:
-            caption = advertisement_repository.active_advertisements[user_id].caption
+            caption = draft["caption"]
             author_text = generate_user_link(user)
             message_text = f"{caption}\n\n{author_text}"
             button_list = [InlineKeyboardButton(messages.BTN_PUBLISH, callback_data="ACTION_PUBLISH"),
                            InlineKeyboardButton(messages.BTN_DISCARD, callback_data="ACTION_DISCARD")]
             reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=2))
-            if advertisement_repository.active_advertisements[user_id].media:
-                media = [InputMediaPhoto(file_id) for file_id in
-                         advertisement_repository.active_advertisements[user_id].media]
+            if draft["media"]:
+                media = [InputMediaPhoto(file_id) for file_id in draft["media"]]
                 await context.bot.send_media_group(chat_id=chat_id, caption=message_text, media=media,
                                                    parse_mode=ParseMode.HTML)
             else:
@@ -179,7 +180,7 @@ async def default_error_handler(update, context):
     tb_string = "".join(tb_list)
     logging.error(f"Traceback: {tb_string}")
     if update and update.effective_user:
-        advertisement_repository.remove_advertisement(update.effective_user.id)
+        advertisement_repository.remove_draft(update.effective_user.id)
         await context.bot.send_message(chat_id=update.effective_chat.id, text=messages.MSG_ERROR)
 
 def main():
