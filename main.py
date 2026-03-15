@@ -13,14 +13,20 @@ import messages
 from advertisement_repository import AdvertisementRepository
 import traceback
 
+import os
+
 try:
     import bot_settings
-except ImportError(bot_settings):
-    logging.info("No bot_settings.py file found! Please refer to README on how to get the bot running!")
-    exit(1)
+    BOT_TOKEN = bot_settings.BOT_TOKEN
+    CHANNEL_ID = bot_settings.CHANNEL_ID
+except ImportError:
+    BOT_TOKEN = os.environ.get("BOT_TOKEN")
+    CHANNEL_ID = os.environ.get("CHANNEL_ID")
+    if not BOT_TOKEN or not CHANNEL_ID:
+        logging.error("No bot_settings.py and no BOT_TOKEN/CHANNEL_ID env vars set.")
+        exit(1)
 
-BOT_TOKEN = bot_settings.BOT_TOKEN
-CHANNEL_ID = bot_settings.CHANNEL_ID
+DB_PATH = os.environ.get("DB_PATH", "advertisements.db")
 LOG_FILENAME = datetime.now().strftime('logs/bot_log_%Y%m%d_%H%M%S.log')
 
 logging.basicConfig(
@@ -28,7 +34,7 @@ logging.basicConfig(
     level=logging.INFO,
     filename=LOG_FILENAME
 )
-advertisement_repository = AdvertisementRepository("advertisements.db")
+advertisement_repository = AdvertisementRepository(DB_PATH)
 
 lock = asyncio.Lock()
 
@@ -134,16 +140,18 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             caption = draft["caption"]
             author_text = generate_user_link(user)
             message_text = f"{caption}\n\n{author_text}"
+            repost_button = InlineKeyboardButton(messages.BTN_REPOST, callback_data=f"ACTION_REPOST_{draft['id']}")
+            repost_markup = InlineKeyboardMarkup([[repost_button]])
             if draft["media"]:
                 media = [InputMediaPhoto(file_id) for file_id in draft["media"]]
                 advertisement_repository.publish(draft["id"])
                 await context.bot.send_media_group(chat_id=CHANNEL_ID, caption=message_text, media=media,
                                                    parse_mode=ParseMode.HTML)
-                await query.edit_message_text(text=messages.MSG_SUCCESS)
+                await query.edit_message_text(text=messages.MSG_SUCCESS, reply_markup=repost_markup)
             else:
                 advertisement_repository.publish(draft["id"])
                 await context.bot.send_message(chat_id=CHANNEL_ID, text=message_text, parse_mode=ParseMode.HTML)
-                await query.edit_message_text(text=messages.MSG_SUCCESS)
+                await query.edit_message_text(text=messages.MSG_SUCCESS, reply_markup=repost_markup)
 
     elif callback_data == "ACTION_DISCARD":
         logging.info(f"Discarding advertisement for user: {update.effective_user.id}")
@@ -171,6 +179,16 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(chat_id=chat_id,
                                            text=messages.MSG_CONFIRM, reply_markup=reply_markup)
 
+    elif callback_data.startswith("ACTION_REPOST_"):
+        ad_id = int(callback_data.split("_")[-1])
+        new_draft_id = advertisement_repository.repost(ad_id, user_id)
+        if new_draft_id is None:
+            await query.edit_message_text(text=messages.MSG_REPOST_NOT_FOUND)
+        else:
+            button_list = [InlineKeyboardButton(messages.BTN_PREVIEW, callback_data="ACTION_PREVIEW")]
+            reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=2))
+            await query.edit_message_text(text=messages.MSG_REPOST_SUCCESS, reply_markup=reply_markup)
+
 
 async def default_error_handler(update, context):
     logging.error(f"Error occurred and wasn't handled in code so triggered default error handler")
@@ -184,7 +202,7 @@ async def default_error_handler(update, context):
         await context.bot.send_message(chat_id=update.effective_chat.id, text=messages.MSG_ERROR)
 
 def main():
-    application = ApplicationBuilder().token(bot_settings.BOT_TOKEN).build()
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
 
     message_handler = MessageHandler(filters.TEXT | filters.PHOTO, handle_user_message)
     start_handler = CommandHandler("start", handle_start)

@@ -8,3 +8,4 @@ bot_settings.py
 credentials.json
 *.db
 service_account.json
+data/

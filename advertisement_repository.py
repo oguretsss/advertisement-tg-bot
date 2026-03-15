@@ -100,3 +100,28 @@ class AdvertisementRepository:
             (user_id,)
         )
         self.conn.commit()
+
+    def get_ad_by_id(self, ad_id):
+        row = self.conn.execute(
+            "SELECT * FROM advertisements WHERE id = ?",
+            (ad_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        ad = dict(row)
+        media_rows = self.conn.execute(
+            "SELECT file_id FROM advertisement_media WHERE advertisement_id = ? ORDER BY position",
+            (ad["id"],)
+        ).fetchall()
+        ad["media"] = [r["file_id"] for r in media_rows]
+        return ad
+
+    def repost(self, ad_id, user_id):
+        original = self.get_ad_by_id(ad_id)
+        if original is None:
+            return None
+        self.remove_draft(user_id)
+        new_id = self.create_draft(user_id, original["caption"])
+        for file_id in original["media"]:
+            self.add_media(new_id, file_id)
+        return new_id
