@@ -37,5 +37,32 @@ BOT_TOKEN = "123456789:hgdywtwhq8vQWERTYUIOPASDFGHKJKMNNBU"
 CHANNEL_ID = "-1001123456789"
 ```
 ## Starting the bot
+
+### Option 1: Run locally
 1. Activate venv: `source venv/bin/activate`
-2. Start bot: `./main.py`
+2. Start bot: `python3 main.py`
+
+### Option 2: Run with Docker
+You can run the bot in a Docker container without creating `bot_settings.py`. Configuration is passed via environment variables.
+
+1. Create a `.env` file (or export the variables in your shell):
+```bash
+BOT_TOKEN=123456789:hgdywtwhq8vQWERTYUIOPASDFGHKJKMNNBU
+CHANNEL_ID=-1001123456789
+```
+2. Start the bot:
+```bash
+docker compose up --build -d
+```
+
+The database is stored in `./data/` and logs in `./logs/` on the host (mounted as volumes).
+
+To stop the bot:
+```bash
+docker compose down
+```
+
+**Note:** When running locally without `bot_settings.py`, you can also use environment variables:
+```bash
+BOT_TOKEN="your-token" CHANNEL_ID="-100your-channel-id" python3 main.py
+```
